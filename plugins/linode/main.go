@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 	"net"
+	"os"
+	"path/filepath"
 
 	"github.com/guilhem/token-renewer/shared"
 	"google.golang.org/grpc"
@@ -15,7 +17,12 @@ func main() {
 		Impl: linodePlugin,
 	}
 
-	lis, err := net.Listen("unix", "/plugins/linode.sock")
+	dir, ok := os.LookupEnv("PLUGIN_DIR")
+	if !ok {
+		dir = "/plugins"
+	}
+
+	lis, err := net.Listen("unix", filepath.Join(dir, "linode.sock"))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
@@ -26,5 +33,4 @@ func main() {
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
-
 }
