@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package barpilot.token_renewer.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "./shared";
+
+// ServiceTokenProvider service definition.
+service TokenProviderService {
+  // RenewToken renews a token and returns the new token, metadata, and expiration time.
+  rpc RenewToken(RenewTokenRequest) returns (RenewTokenResponse);
+
+  // GetTokenValidity checks the validity of a token and returns its expiration time.
+  rpc GetTokenValidity(GetTokenValidityRequest) returns (GetTokenValidityResponse);
+}
+
+// RenewTokenRequest is the request message for the RenewToken RPC.
+message RenewTokenRequest {
+  string metadata = 1;
+}
+
+// RenewTokenResponse is the response message for the RenewToken RPC.
+message RenewTokenResponse {
+  string token = 1;
+  string new_metadata = 2;
+  google.protobuf.Timestamp expiration = 3;
+}
+
+// GetTokenValidityRequest is the request message for the GetTokenValidity RPC.
+message GetTokenValidityRequest {
+  string token = 1;
+}
+
+// GetTokenValidityResponse is the response message for the GetTokenValidity RPC.
+message GetTokenValidityResponse {
+  google.protobuf.Timestamp expiration = 1;
+}
