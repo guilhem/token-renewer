@@ -22,9 +22,12 @@ func main() {
 		dir = "/plugins"
 	}
 
-	lis, err := net.Listen("unix", filepath.Join(dir, "linode.sock"))
+	socket := filepath.Join(dir, "linode.sock")
+	defer os.Remove(socket)
+
+	lis, err := net.Listen("unix", socket)
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		log.Panicf("failed to listen: %v", err)
 	}
 	defer lis.Close()
 
@@ -33,6 +36,6 @@ func main() {
 	grpcServer := grpc.NewServer(opts...)
 	shared.RegisterTokenProviderServiceServer(grpcServer, &server)
 	if err := grpcServer.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+		log.Panicf("failed to serve: %v", err)
 	}
 }
