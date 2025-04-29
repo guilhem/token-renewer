@@ -26,7 +26,7 @@ type TokenSpec struct {
 	// +kubebuilder:validation:Required
 	Provider ProviderSpec `json:"provider"`
 	// +kubebuilder:validation:Required
-	Metadata string `json:"value,omitempty"`
+	Metadata string `json:"metadata,omitempty"`
 	// +kubebuilder:validation:Required
 	Renewval RenewvalSpec `json:"renewval,omitempty"`
 	// +kubebuilder:validation:Required

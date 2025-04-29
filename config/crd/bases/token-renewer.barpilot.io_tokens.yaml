@@ -39,6 +39,8 @@ spec:
           spec:
             description: TokenSpec defines the desired state of Token.
             properties:
+              metadata:
+                type: string
               provider:
                 description: ProviderSpec defines the desired state of the provider.
                 properties:
@@ -69,13 +71,11 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
-              value:
-                type: string
             required:
+            - metadata
             - provider
             - renewval
             - secretRef
-            - value
             type: object
           status:
             description: TokenStatus defines the observed state of Token.
