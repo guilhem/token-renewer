@@ -1,0 +1,12 @@
+apiVersion: token-renewer.barpilot.io/v1beta1
+kind: Token
+metadata:
+  name: token-sample
+spec:
+  provider:
+    name: "linode"
+  metadata: "12345" # token id
+  renewval:
+    beforeDuration: "1d" # renew before 1 day
+  secretRef:
+    name: myToken
