@@ -6,8 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/guilhem/token-renewer/shared"
 	"google.golang.org/grpc"
+
+	"github.com/guilhem/token-renewer/shared"
 )
 
 func main() {

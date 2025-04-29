@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: token-renewer-controller-manager
+  namespace: token-renewer-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: linode-plugin
+          image: linode-plugin
+          command:
+            - /linode-plugin
+          volumeMounts:
+            - name: plugins
+              mountPath: "/plugins"
