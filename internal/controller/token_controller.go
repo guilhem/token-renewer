@@ -70,6 +70,13 @@ func (r *TokenReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, fmt.Errorf("unable to fetch secret: %w", err)
 	}
 
+	tokenValue := string(secret.Data["token"])
+	if tokenValue == "" {
+		log.Info("Token is empty, renewing", "token", token.GetName())
+		// TODO
+		return ctrl.Result{}, fmt.Errorf("token is empty")
+	}
+
 	// Get the provider for the token
 	providerName := token.Spec.Provider.Name
 	provider, err := r.ProvidersManager.GetProvider(providerName)
@@ -82,7 +89,7 @@ func (r *TokenReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	if token.Status.ExpirationTime.IsZero() {
 		log.Info("Token has no expiration time, setting it")
 
-		t, err := provider.GetTokenValidity(token.Spec.Metadata)
+		t, err := provider.GetTokenValidity(ctx, token.Spec.Metadata, tokenValue)
 		if err != nil {
 			log.Error(err, "unable to get token validity", "token", token.Spec.Metadata)
 			r.Recorder.Event(token, "Warning", "TokenValidityError", "Error getting token validity")
@@ -90,7 +97,7 @@ func (r *TokenReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		}
 
 		if op, err := controllerutil.CreateOrPatch(ctx, r.Client, token, func() error {
-			token.Status.ExpirationTime = metav1.NewTime(t)
+			token.Status.ExpirationTime = metav1.NewTime(*t)
 			return nil
 		}); err != nil {
 			log.Error(err, "unable to update Token", "token", token.GetName())
@@ -107,7 +114,7 @@ func (r *TokenReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 	if token.Status.ExpirationTime.After(timeToUpdate) {
 		log.Info("Token is about to expire, renewing", "token", token.GetName())
-		newToken, newMeta, newTime, err := provider.RenewToken(token.Spec.Metadata)
+		newToken, newMeta, newTime, err := provider.RenewToken(ctx, token.Spec.Metadata, tokenValue)
 		if err != nil {
 			log.Error(err, "unable to renew token", "token", token.Spec.Metadata)
 			r.Recorder.Event(token, "Warning", "TokenRenewalError", "Error renewing token")
@@ -131,7 +138,7 @@ func (r *TokenReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		// Update the token with the new metadata and expiration time
 		if op, err := controllerutil.CreateOrPatch(ctx, r.Client, token, func() error {
 			token.Spec.Metadata = newMeta
-			token.Status.ExpirationTime = metav1.NewTime(newTime)
+			token.Status.ExpirationTime = metav1.NewTime(*newTime)
 			return nil
 		}); err != nil {
 			r.Recorder.Event(token, "Warning", "TokenUpdateError", "Error updating token")

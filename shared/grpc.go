@@ -14,22 +14,24 @@ func NewGRPCClient(client TokenProviderServiceClient) *GRPCClient {
 	return &GRPCClient{client: client}
 }
 
-func (m *GRPCClient) RenewToken(ctx context.Context, metadata string) (string, string, time.Time, error) {
-	req := &RenewTokenRequest{Metadata: metadata}
+func (m *GRPCClient) RenewToken(ctx context.Context, metadata, token string) (string, string, *time.Time, error) {
+	req := &RenewTokenRequest{Metadata: metadata, Token: token}
 	resp, err := m.client.RenewToken(ctx, req)
 	if err != nil {
-		return "", "", time.Time{}, err
+		return "", "", nil, err
 	}
-	return resp.Token, resp.NewMetadata, resp.Expiration.AsTime(), nil
+	t := resp.Expiration.AsTime()
+	return resp.Token, resp.NewMetadata, &t, nil
 }
 
-func (m *GRPCClient) GetTokenValidity(ctx context.Context, token string) (time.Time, error) {
-	req := &GetTokenValidityRequest{Token: token}
+func (m *GRPCClient) GetTokenValidity(ctx context.Context, metadata, token string) (*time.Time, error) {
+	req := &GetTokenValidityRequest{Token: token, Metadata: metadata}
 	resp, err := m.client.GetTokenValidity(ctx, req)
 	if err != nil {
-		return time.Time{}, err
+		return nil, err
 	}
-	return resp.Expiration.AsTime(), nil
+	t := resp.Expiration.AsTime()
+	return &t, nil
 }
 
 // Here is the gRPC server that GRPCClient talks to.
@@ -40,23 +42,23 @@ type GRPCServer struct {
 }
 
 func (m *GRPCServer) RenewToken(ctx context.Context, req *RenewTokenRequest) (*RenewTokenResponse, error) {
-	token, newMetadata, expiration, err := m.Impl.RenewToken(req.Metadata)
+	token, newMetadata, expiration, err := m.Impl.RenewToken(ctx, req.Metadata, req.Token)
 	if err != nil {
 		return nil, err
 	}
 	return &RenewTokenResponse{
 		Token:       token,
 		NewMetadata: newMetadata,
-		Expiration:  timestamppb.New(expiration),
+		Expiration:  timestamppb.New(*expiration),
 	}, nil
 }
 
 func (m *GRPCServer) GetTokenValidity(ctx context.Context, req *GetTokenValidityRequest) (*GetTokenValidityResponse, error) {
-	expiration, err := m.Impl.GetTokenValidity(req.Token)
+	expiration, err := m.Impl.GetTokenValidity(ctx, req.Metadata, req.Token)
 	if err != nil {
 		return nil, err
 	}
 	return &GetTokenValidityResponse{
-		Expiration: timestamppb.New(expiration),
+		Expiration: timestamppb.New(*expiration),
 	}, nil
 }

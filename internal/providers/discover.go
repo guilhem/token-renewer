@@ -1,40 +1,40 @@
 package providers
 
 import (
-	"net"
+	"fmt"
 	"path/filepath"
 
-	"github.com/hashicorp/go-plugin"
+	"google.golang.org/grpc"
 
 	"github.com/guilhem/token-renewer/shared"
 )
 
-func DiscoverPlugins(dir string) (map[string]plugin.ClientConfig, error) {
-	// Make the directory absolute if it isn't already
-	sockets, err := plugin.Discover("*.socket", dir)
+func DiscoverPlugins(dir string) (map[string]*shared.GRPCClient, error) {
+
+	if !filepath.IsAbs(dir) {
+		absDir, err := filepath.Abs(dir)
+		if err != nil {
+			return nil, err
+		}
+		dir = absDir
+	}
+
+	sockets, err := filepath.Glob(filepath.Join(dir, "*.sock"))
 	if err != nil {
 		return nil, err
 	}
 
-	plugins := make(map[string]plugin.ClientConfig, len(sockets))
+	plugins := make(map[string]*shared.GRPCClient, len(sockets))
 	for _, socket := range sockets {
-		basename := filepath.Base(socket)
+		socketName := filepath.Base(socket)
 		// Remove the ".socket" suffix to get the plugin name
-		pluginName := basename[:len(basename)-len(".socket")]
+		pluginName := socketName[:len(socketName)-len(".socket")]
 
-		addr, err := net.ResolveUnixAddr("unix", socket)
+		conn, err := grpc.NewClient(fmt.Sprintf("unix://%s", socket))
 		if err != nil {
 			return nil, err
 		}
-		plugins[socket] = plugin.ClientConfig{
-			HandshakeConfig: shared.Handshake,
-			Plugins: map[string]plugin.Plugin{
-				pluginName: &shared.TokenPlugin{},
-			},
-			Reattach: &plugin.ReattachConfig{
-				Addr: addr,
-			},
-		}
+		plugins[pluginName] = shared.NewGRPCClient(shared.NewTokenProviderServiceClient(conn))
 	}
 
 	return plugins, nil

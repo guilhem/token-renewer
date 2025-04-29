@@ -26,6 +26,7 @@ const (
 type RenewTokenRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Metadata      string                 `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	Token         string                 `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -63,6 +64,13 @@ func (*RenewTokenRequest) Descriptor() ([]byte, []int) {
 func (x *RenewTokenRequest) GetMetadata() string {
 	if x != nil {
 		return x.Metadata
+	}
+	return ""
+}
+
+func (x *RenewTokenRequest) GetToken() string {
+	if x != nil {
+		return x.Token
 	}
 	return ""
 }
@@ -131,7 +139,8 @@ func (x *RenewTokenResponse) GetExpiration() *timestamppb.Timestamp {
 // GetTokenValidityRequest is the request message for the GetTokenValidity RPC.
 type GetTokenValidityRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	Metadata      string                 `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	Token         string                 `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -164,6 +173,13 @@ func (x *GetTokenValidityRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use GetTokenValidityRequest.ProtoReflect.Descriptor instead.
 func (*GetTokenValidityRequest) Descriptor() ([]byte, []int) {
 	return file_barpilot_token_renewer_v1_token_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *GetTokenValidityRequest) GetMetadata() string {
+	if x != nil {
+		return x.Metadata
+	}
+	return ""
 }
 
 func (x *GetTokenValidityRequest) GetToken() string {
@@ -222,17 +238,19 @@ var File_barpilot_token_renewer_v1_token_proto protoreflect.FileDescriptor
 
 const file_barpilot_token_renewer_v1_token_proto_rawDesc = "" +
 	"\n" +
-	"%barpilot/token_renewer/v1/token.proto\x12\x19barpilot.token_renewer.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"/\n" +
+	"%barpilot/token_renewer/v1/token.proto\x12\x19barpilot.token_renewer.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"E\n" +
 	"\x11RenewTokenRequest\x12\x1a\n" +
-	"\bmetadata\x18\x01 \x01(\tR\bmetadata\"\x89\x01\n" +
+	"\bmetadata\x18\x01 \x01(\tR\bmetadata\x12\x14\n" +
+	"\x05token\x18\x02 \x01(\tR\x05token\"\x89\x01\n" +
 	"\x12RenewTokenResponse\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12!\n" +
 	"\fnew_metadata\x18\x02 \x01(\tR\vnewMetadata\x12:\n" +
 	"\n" +
 	"expiration\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"expiration\"/\n" +
-	"\x17GetTokenValidityRequest\x12\x14\n" +
-	"\x05token\x18\x01 \x01(\tR\x05token\"V\n" +
+	"expiration\"K\n" +
+	"\x17GetTokenValidityRequest\x12\x1a\n" +
+	"\bmetadata\x18\x01 \x01(\tR\bmetadata\x12\x14\n" +
+	"\x05token\x18\x02 \x01(\tR\x05token\"V\n" +
 	"\x18GetTokenValidityResponse\x12:\n" +
 	"\n" +
 	"expiration\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +

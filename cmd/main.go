@@ -192,14 +192,9 @@ func main() {
 	}
 
 	// Register plugins with the providers manager
-	for plugin, config := range plugins {
+	for plugin, cl := range plugins {
 		setupLog.Info("Registering plugin", "name", plugin)
-		providersManager.RegisterPlugin(plugin, &config)
-	}
-
-	if err := providersManager.Start(); err != nil {
-		setupLog.Error(err, "unable to start providers manager")
-		os.Exit(1)
+		providersManager.RegisterPlugin(plugin, cl)
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{

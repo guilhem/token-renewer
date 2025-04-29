@@ -18,6 +18,7 @@ service TokenProviderService {
 // RenewTokenRequest is the request message for the RenewToken RPC.
 message RenewTokenRequest {
   string metadata = 1;
+  string token = 2;
 }
 
 // RenewTokenResponse is the response message for the RenewToken RPC.
@@ -29,7 +30,8 @@ message RenewTokenResponse {
 
 // GetTokenValidityRequest is the request message for the GetTokenValidity RPC.
 message GetTokenValidityRequest {
-  string token = 1;
+  string metadata = 1;
+  string token = 2;
 }
 
 // GetTokenValidityResponse is the response message for the GetTokenValidity RPC.
