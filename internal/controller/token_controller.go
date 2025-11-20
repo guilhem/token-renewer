@@ -25,10 +25,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	tokenrenewerv1beta1 "github.com/guilhem/token-renewer/api/v1beta1"
 	"github.com/guilhem/token-renewer/internal/providers"
@@ -70,10 +73,17 @@ func (r *TokenReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, fmt.Errorf("unable to fetch secret: %w", err)
 	}
 
-	tokenValue := string(secret.Data["token"])
+	tokenBytes, exists := secret.Data["token"]
+	if !exists {
+		log.Error(nil, "token key not found in secret", "secret", secretRef.Name, "key", "token")
+		r.Recorder.Event(token, "Warning", "TokenKeyNotFound", "Secret missing 'token' key")
+		return ctrl.Result{}, fmt.Errorf("token key not found in secret")
+	}
+
+	tokenValue := string(tokenBytes)
 	if tokenValue == "" {
-		log.Info("Token is empty, renewing", "token", token.GetName())
-		// TODO
+		log.Info("Token is empty, cannot use for renewal", "token", token.GetName())
+		r.Recorder.Event(token, "Warning", "TokenEmpty", "Token is empty")
 		return ctrl.Result{}, fmt.Errorf("token is empty")
 	}
 
@@ -112,7 +122,7 @@ func (r *TokenReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// Check if the token is about to expire
 	timeToUpdate := time.Now().Add(token.Spec.Renewval.BeforeDuration.Duration)
 
-	if token.Status.ExpirationTime.After(timeToUpdate) {
+	if !token.Status.ExpirationTime.After(timeToUpdate) {
 		log.Info("Token is about to expire, renewing", "token", token.GetName())
 		newToken, newMeta, newTime, err := provider.RenewToken(ctx, token.Spec.Metadata, tokenValue)
 		if err != nil {
@@ -154,10 +164,13 @@ func (r *TokenReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}, nil
 }
 
-// SetupWithManager sets up the controller with the Manager.
-func (r *TokenReconciler) SetupWithManager(mgr ctrl.Manager) error {
+// SetupWithManager sets up the controller with the Manager using a custom rate limiter.
+func (r *TokenReconciler) SetupWithManager(mgr ctrl.Manager, rateLimiter workqueue.TypedRateLimiter[reconcile.Request]) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&tokenrenewerv1beta1.Token{}).
+		WithOptions(controller.Options{
+			RateLimiter: rateLimiter,
+		}).
 		Named("token").
 		Complete(r)
 }

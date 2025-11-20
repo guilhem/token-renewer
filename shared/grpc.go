@@ -7,7 +7,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// GRPCClient is an implementation of KV that talks over RPC.
+// GRPCClient is an implementation of TokenProvider that talks over gRPC.
 type GRPCClient struct{ client TokenProviderServiceClient }
 
 func NewGRPCClient(client TokenProviderServiceClient) *GRPCClient {
@@ -15,8 +15,12 @@ func NewGRPCClient(client TokenProviderServiceClient) *GRPCClient {
 }
 
 func (m *GRPCClient) RenewToken(ctx context.Context, metadata, token string) (string, string, *time.Time, error) {
+	// Add 30-second timeout to prevent indefinite blocking
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	req := &RenewTokenRequest{Metadata: metadata, Token: token}
-	resp, err := m.client.RenewToken(ctx, req)
+	resp, err := m.client.RenewToken(ctxWithTimeout, req)
 	if err != nil {
 		return "", "", nil, err
 	}
@@ -25,8 +29,12 @@ func (m *GRPCClient) RenewToken(ctx context.Context, metadata, token string) (st
 }
 
 func (m *GRPCClient) GetTokenValidity(ctx context.Context, metadata, token string) (*time.Time, error) {
+	// Add 30-second timeout to prevent indefinite blocking
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	req := &GetTokenValidityRequest{Token: token, Metadata: metadata}
-	resp, err := m.client.GetTokenValidity(ctx, req)
+	resp, err := m.client.GetTokenValidity(ctxWithTimeout, req)
 	if err != nil {
 		return nil, err
 	}

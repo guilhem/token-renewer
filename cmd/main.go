@@ -21,6 +21,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -29,16 +30,19 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	tokenrenewerv1beta1 "github.com/guilhem/token-renewer/api/v1beta1"
 	"github.com/guilhem/token-renewer/internal/controller"
+	"github.com/guilhem/token-renewer/internal/pluginserver"
 	"github.com/guilhem/token-renewer/internal/providers"
 	// +kubebuilder:scaffold:imports
 )
@@ -64,7 +68,6 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
-	var socketsPluginsDir string
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -83,7 +86,9 @@ func main() {
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
-	flag.StringVar(&socketsPluginsDir, "sockets-plugins-dir", "/plugins", "The directory that contains the plugin sockets (*.sockets).")
+	var pluginServerAddr string
+	flag.StringVar(&pluginServerAddr, "plugin-server-addr", "unix:///tmp/token-renewer.sock", "The address where the plugin server listens. "+
+		"Supports 'unix:///path/to/socket' or 'tcp://host:port' formats.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -184,18 +189,11 @@ func main() {
 	// Create a new providers manager
 	providersManager := providers.NewProvidersManager()
 
-	// Discover plugins in the specified directory
-	plugins, err := providers.DiscoverPlugins(socketsPluginsDir)
-	if err != nil {
-		setupLog.Error(err, "unable to discover plugins", "sockets-plugins-dir", socketsPluginsDir)
-		os.Exit(1)
-	}
-
-	// Register plugins with the providers manager
-	for plugin, cl := range plugins {
-		setupLog.Info("Registering plugin", "name", plugin)
-		providersManager.RegisterPlugin(plugin, cl)
-	}
+	// Create plugin server
+	pluginSrv := pluginserver.NewServer(
+		pluginServerAddr,
+		providersManager,
+	)
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
@@ -221,12 +219,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Add plugin server to manager
+	if err := mgr.Add(pluginSrv); err != nil {
+		setupLog.Error(err, "unable to add plugin server to manager")
+		os.Exit(1)
+	}
+
 	if err = (&controller.TokenReconciler{
 		Client:           mgr.GetClient(),
 		Scheme:           mgr.GetScheme(),
 		Recorder:         mgr.GetEventRecorderFor("token-renewer"),
 		ProvidersManager: providersManager,
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(mgr, workqueue.NewTypedItemFastSlowRateLimiter[reconcile.Request](
+		100*time.Millisecond, // fast delay: quick retries for transient errors
+		5*time.Minute,        // slow delay: longer wait for persistent errors
+		3,                    // max fast attempts before switching to slow
+	)); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Token")
 		os.Exit(1)
 	}

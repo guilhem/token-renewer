@@ -1,0 +1,27 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: plugin-access-role
+rules:
+  # Plugins need permission to access the token renewer gRPC API via kube-rbac-proxy
+  # This controls which plugins can connect to the operator's HTTPS endpoint
+  # The "/" path allows access to all gRPC methods exposed by the operator
+  - nonResourceURLs: ["/"]
+    verbs: ["get", "post"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: plugin-access-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: plugin-access-role
+subjects:
+  # Grant access to the linode plugin service account
+  # The plugin connects via HTTPS (gRPC/TLS) through kube-rbac-proxy
+  # kube-rbac-proxy validates the token and this ClusterRole
+  # Then forwards the gRPC request to the operator's Unix socket
+  - kind: ServiceAccount
+    name: linode-plugin
+    namespace: system

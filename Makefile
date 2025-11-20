@@ -156,6 +156,11 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
+.PHONY: kind-reset
+kind-reset: ## Reset the Kind cluster (delete and recreate).
+	@$(KIND) delete cluster --name kind || true
+	@$(KIND) create cluster --name kind
+
 ##@ Dependencies
 
 ## Location to install dependencies to

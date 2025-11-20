@@ -1,2 +1,13 @@
 resources:
 - manager.yaml
+
+# Apply kube-rbac-proxy sidecar configuration
+patchesStrategicMerge:
+- kube-rbac-proxy.yaml
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+images:
+- name: controller
+  newName: example.com/token-renewer
+  newTag: v0.0.1
