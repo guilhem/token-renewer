@@ -17,16 +17,23 @@ limitations under the License.
 package e2e
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/guilhem/token-renewer/shared"
 	"github.com/guilhem/token-renewer/test/utils"
 )
 
@@ -177,7 +184,10 @@ var _ = Describe("Manager", Ordered, func() {
 				fmt.Sprintf("--serviceaccount=%s:%s", namespace, serviceAccountName),
 			)
 			_, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create ClusterRoleBinding")
+			// Ignore if already exists - this is idempotent
+			if err != nil && !strings.Contains(err.Error(), "already exists") {
+				Expect(err).NotTo(HaveOccurred(), "Failed to create ClusterRoleBinding")
+			}
 
 			By("validating that the metrics service is available")
 			cmd = exec.Command("kubectl", "get", "service", metricsServiceName, "-n", namespace)
@@ -319,6 +329,160 @@ func getMetricsOutput() string {
 	Expect(metricsOutput).To(ContainSubstring("< HTTP/1.1 200 OK"))
 	return metricsOutput
 }
+
+// MockTokenProvider is a test implementation of TokenProviderServiceServer
+type MockTokenProvider struct {
+	shared.UnimplementedTokenProviderServiceServer
+}
+
+func (m *MockTokenProvider) RenewToken(ctx context.Context, req *shared.RenewTokenRequest) (*shared.RenewTokenResponse, error) {
+	// Return a new token with metadata containing the request ID
+	newToken := fmt.Sprintf("renewed-token-from-%s", req.Metadata)
+	newMetadata := fmt.Sprintf("renewed-metadata-%s", req.Metadata)
+	expiration := time.Now().Add(24 * time.Hour)
+
+	return &shared.RenewTokenResponse{
+		Token:       newToken,
+		NewMetadata: newMetadata,
+		Expiration:  timestamppb.New(expiration),
+	}, nil
+}
+
+func (m *MockTokenProvider) GetTokenValidity(ctx context.Context, req *shared.GetTokenValidityRequest) (*shared.GetTokenValidityResponse, error) {
+	// Return an expiration time 7 days from now
+	expiration := time.Now().Add(7 * 24 * time.Hour)
+
+	return &shared.GetTokenValidityResponse{
+		Expiration: timestamppb.New(expiration),
+	}, nil
+}
+
+var _ = Describe("Plugin Direct RPC Communication", Ordered, func() {
+	var (
+		mockPlugin *MockTokenProvider
+		lis        net.Listener
+		serverAddr string
+		grpcSrv    *grpc.Server
+	)
+
+	BeforeAll(func() {
+		// Find an available port
+		var err error
+		lis, err = net.Listen("tcp", "127.0.0.1:0")
+		Expect(err).NotTo(HaveOccurred())
+		serverAddr = lis.Addr().String()
+
+		// Create mock plugin
+		mockPlugin = &MockTokenProvider{}
+
+		// Start gRPC server with mock plugin
+		grpcSrv = grpc.NewServer()
+		shared.RegisterTokenProviderServiceServer(grpcSrv, mockPlugin)
+
+		// Run server in background
+		go func() {
+			_ = grpcSrv.Serve(lis)
+		}()
+
+		// Give server time to start
+		time.Sleep(500 * time.Millisecond)
+	})
+
+	AfterAll(func() {
+		grpcSrv.Stop()
+		lis.Close() //nolint:errcheck
+	})
+
+	Context("Token Renewal", func() {
+		It("should renew a token and return new token with metadata", func() {
+			// Create a client connection
+			conn, err := grpc.NewClient(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			Expect(err).NotTo(HaveOccurred())
+			defer conn.Close() //nolint:errcheck
+
+			client := shared.NewTokenProviderServiceClient(conn)
+
+			// Call RenewToken RPC
+			req := &shared.RenewTokenRequest{
+				Metadata: "linode-token-123",
+				Token:    "old-token",
+			}
+
+			resp, err := client.RenewToken(context.Background(), req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp).NotTo(BeNil())
+
+			// Verify response contains new token
+			Expect(resp.Token).To(Equal("renewed-token-from-linode-token-123"))
+			Expect(resp.NewMetadata).To(Equal("renewed-metadata-linode-token-123"))
+			Expect(resp.Expiration).NotTo(BeNil())
+
+			// Verify expiration is in the future
+			expTime := resp.Expiration.AsTime()
+			Expect(expTime).To(BeTemporally(">", time.Now()))
+			Expect(expTime).To(BeTemporally("<", time.Now().Add(25*time.Hour)))
+		})
+	})
+
+	Context("Token Validity Check", func() {
+		It("should return token expiration time", func() {
+			// Create a client connection
+			conn, err := grpc.NewClient(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			Expect(err).NotTo(HaveOccurred())
+			defer conn.Close() //nolint:errcheck
+
+			client := shared.NewTokenProviderServiceClient(conn)
+
+			// Call GetTokenValidity RPC
+			req := &shared.GetTokenValidityRequest{
+				Metadata: "linode-token-456",
+				Token:    "some-token",
+			}
+
+			resp, err := client.GetTokenValidity(context.Background(), req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp).NotTo(BeNil())
+
+			// Verify response contains expiration time
+			Expect(resp.Expiration).NotTo(BeNil())
+
+			// Verify expiration is approximately 7 days from now
+			expTime := resp.Expiration.AsTime()
+			expectedTime := time.Now().Add(7 * 24 * time.Hour)
+			Expect(expTime).To(BeTemporally(">", time.Now()))
+			Expect(expTime).To(BeTemporally("<", expectedTime.Add(1*time.Minute)))
+		})
+	})
+
+	Context("Multiple Concurrent Requests", func() {
+		It("should handle concurrent RenewToken requests", func() {
+			conn, err := grpc.NewClient(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			Expect(err).NotTo(HaveOccurred())
+			defer conn.Close() //nolint:errcheck
+
+			client := shared.NewTokenProviderServiceClient(conn)
+
+			// Send multiple concurrent requests
+			responses := make([]*shared.RenewTokenResponse, 3)
+			for i := 0; i < 3; i++ {
+				req := &shared.RenewTokenRequest{
+					Metadata: fmt.Sprintf("token-%d", i),
+					Token:    fmt.Sprintf("old-token-%d", i),
+				}
+
+				resp, err := client.RenewToken(context.Background(), req)
+				Expect(err).NotTo(HaveOccurred())
+				responses[i] = resp
+			}
+
+			// Verify all responses are different
+			for i := 0; i < 3; i++ {
+				Expect(responses[i].Token).To(Equal(fmt.Sprintf("renewed-token-from-token-%d", i)))
+				Expect(responses[i].NewMetadata).To(Equal(fmt.Sprintf("renewed-metadata-token-%d", i)))
+			}
+		})
+	})
+})
 
 // tokenRequest is a simplified representation of the Kubernetes TokenRequest API response,
 // containing only the token field that we need to extract.

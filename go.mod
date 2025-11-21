@@ -1,10 +1,11 @@
 module github.com/guilhem/token-renewer
 
-go 1.23.0
+go 1.25.0
 
 godebug default=go1.23
 
 require (
+	github.com/guilhem/operator-plugin-framework v0.0.0-20251121000814-e4cc56a28677
 	github.com/onsi/ginkgo/v2 v2.22.0
 	github.com/onsi/gomega v1.36.1
 	google.golang.org/grpc v1.65.0

@@ -6,4 +6,4 @@ plugins:
     out: .
 
 inputs:
-  - directory: ./proto/v1
+  - directory: ./proto

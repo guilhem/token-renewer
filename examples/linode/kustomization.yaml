@@ -3,9 +3,11 @@ kind: Kustomization
 
 resources:
   - github.com/guilhem/token-renewer/config/default?ref=main
+  - token.yaml
 
 patches:
   - path: plugin-container-patch.yaml
     target:
       kind: Deployment
       labelSelector: control-plane=controller-manager,app.kubernetes.io/name=token-renewer
+

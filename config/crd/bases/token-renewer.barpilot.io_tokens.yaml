@@ -40,6 +40,7 @@ spec:
             description: TokenSpec defines the desired state of Token.
             properties:
               metadata:
+                minLength: 1
                 type: string
               provider:
                 description: ProviderSpec defines the desired state of the provider.
