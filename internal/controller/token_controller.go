@@ -122,7 +122,7 @@ func (r *TokenReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// Check if the token is about to expire
 	timeToUpdate := time.Now().Add(token.Spec.Renewval.BeforeDuration.Duration)
 
-	if !token.Status.ExpirationTime.After(timeToUpdate) {
+	if !token.Status.ExpirationTime.IsZero() && !token.Status.ExpirationTime.After(timeToUpdate) {
 		log.Info("Token is about to expire, renewing", "token", token.GetName())
 		newToken, newMeta, newTime, err := provider.RenewToken(ctx, token.Spec.Metadata, tokenValue)
 		if err != nil {
