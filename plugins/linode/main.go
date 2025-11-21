@@ -4,26 +4,33 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/guilhem/operator-plugin-framework/client"
+	"github.com/guilhem/operator-plugin-framework/stream"
 	"github.com/guilhem/token-renewer/shared"
 	"google.golang.org/grpc"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
-var (
+const (
 	pluginName    = "linode"
 	pluginVersion = "v0.1.0"
 )
 
 func main() {
-	var socketPath string
+	var (
+		operatorAddr    string
+		useServiceToken bool
+	)
 
-	flag.StringVar(&socketPath, "socket-path", "/plugins/linode.sock", "Path to the Unix socket")
+	flag.StringVar(&operatorAddr, "operator-addr", "https://operator-kube-rbac-proxy:8443",
+		"Address of the operator gRPC server (via kube-rbac-proxy in production)")
+	flag.BoolVar(&useServiceToken, "use-service-token", true,
+		"Use Kubernetes ServiceAccount token for authentication (requires kube-rbac-proxy)")
 
 	opts := zap.Options{
 		Development: true,
@@ -39,7 +46,7 @@ func main() {
 	setupLog.Info("Starting Linode plugin",
 		"name", pluginName,
 		"version", pluginVersion,
-		"socket", socketPath,
+		"operator", operatorAddr,
 	)
 
 	// Handle graceful shutdown
@@ -49,8 +56,8 @@ func main() {
 	// Create Linode plugin instance
 	linodePlugin := &LinodePlugin{}
 
-	// Start gRPC server on Unix socket
-	if err := runPlugin(ctx, socketPath, linodePlugin); err != nil {
+	// Connect to operator using framework client and run plugin
+	if err := runPlugin(ctx, operatorAddr, useServiceToken, linodePlugin); err != nil {
 		if err != context.Canceled {
 			setupLog.Error(err, "plugin failed")
 			os.Exit(1)
@@ -60,42 +67,47 @@ func main() {
 	setupLog.Info("Plugin stopped gracefully")
 }
 
-// runPlugin starts a gRPC server that implements TokenProviderService on a Unix socket.
-func runPlugin(ctx context.Context, socketPath string, plugin *LinodePlugin) error {
-	// Listen on Unix socket
-	listener, err := net.Listen("unix", socketPath)
-	if err != nil {
-		return fmt.Errorf("failed to listen on socket %s: %w", socketPath, err)
+// runPlugin connects to the operator using the operator-plugin-framework client.
+// It establishes a bidirectional stream using the framework's PluginStreamClient, then handles RPC calls.
+func runPlugin(ctx context.Context, operatorAddr string, useServiceToken bool, plugin *LinodePlugin) error {
+	logger := log.FromContext(ctx)
+
+	// Create client options for authentication
+	var clientOpts []client.ClientOption
+	if useServiceToken {
+		clientOpts = append(clientOpts, client.WithServiceAccountToken())
+		logger.Info("Using Kubernetes ServiceAccount token for authentication")
 	}
-	defer listener.Close()
 
-	log.Log.Info("Plugin listening on socket", "path", socketPath)
+	// Create Plugin Service implementation
+	pluginServer := &LinodePlugin{}
 
-	// Create gRPC server
-	grpcServer := grpc.NewServer()
-	defer grpcServer.Stop()
+	// Create PluginStreamClient using the simplified API
+	pluginStreamClient, err := client.New(
+		ctx,
+		pluginName,
+		operatorAddr,
+		pluginVersion,
+		shared.TokenProviderService_ServiceDesc,
+		pluginServer,
+		func(conn *grpc.ClientConn) (stream.StreamInterface, error) {
+			tokenClient := shared.NewTokenProviderServiceClient(conn)
+			return tokenClient.PluginStream(ctx)
+		},
+		clientOpts...,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create plugin stream client: %w", err)
+	}
 
-	// Register the plugin as the implementation of TokenProviderService
-	shared.RegisterTokenProviderServiceServer(grpcServer, plugin)
-
-	log.Log.Info("Serving gRPC requests", "name", pluginName)
-
-	// Run server in a goroutine
-	serverErrs := make(chan error, 1)
-	go func() {
-		serverErrs <- grpcServer.Serve(listener)
+	defer func() {
+		if cerr := pluginStreamClient.Close(); cerr != nil {
+			logger.Error(cerr, "failed to close plugin stream client")
+		}
 	}()
 
-	// Wait for context cancellation or server error
-	select {
-	case <-ctx.Done():
-		log.Log.Info("Shutting down gRPC server")
-		grpcServer.GracefulStop()
-		return nil
-	case err := <-serverErrs:
-		if err != nil {
-			return fmt.Errorf("server error: %w", err)
-		}
-		return nil
-	}
+	logger.Info("Connected to operator and registered plugin via framework")
+
+	// Start handling RPC calls - this blocks until context is cancelled
+	return pluginStreamClient.HandleRPCCalls(ctx)
 }

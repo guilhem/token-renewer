@@ -24,40 +24,40 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	pluginframeworkv1 "github.com/guilhem/operator-plugin-framework/pluginframework/v1"
+	"github.com/guilhem/operator-plugin-framework/stream"
 	"github.com/guilhem/token-renewer/internal/providers"
-	"github.com/guilhem/token-renewer/shared"
+	shared "github.com/guilhem/token-renewer/shared"
 )
 
-// Server manages plugin connections and implements the TokenProviderService.
-// Plugins connect via standard gRPC RPC calls.
-type Server struct {
-	shared.UnimplementedTokenProviderServiceServer
-
-	addr             string
-	providersManager *providers.ProvidersManager
-	plugins          map[string]shared.TokenProviderServiceClient
-	pluginsMu        sync.RWMutex
-	grpcServer       *grpc.Server
-	lis              net.Listener
+// StreamServer runs inside the controller and only exposes the PluginStream RPC
+// so plugin providers can connect. The actual token provider RPCs are implemented
+// by the plugins themselves.
+type StreamServer struct {
+	addr     string
+	handler  *StreamHandler
+	grpcServer *grpc.Server
+	lis      net.Listener
 }
 
-// NewServer creates a new plugin server.
-// Authentication is delegated to kube-rbac-proxy sidecar.
+// NewServer creates a new controller-side stream server that accepts plugin connections.
 func NewServer(
 	addr string,
 	providersManager *providers.ProvidersManager,
-) *Server {
-	return &Server{
-		addr:             addr,
-		providersManager: providersManager,
-		plugins:          make(map[string]shared.TokenProviderServiceClient),
+) *StreamServer {
+	return &StreamServer{
+		addr:    addr,
+		handler: NewStreamHandler(providersManager),
 	}
 }
 
 // Start begins listening for plugin connections.
-func (s *Server) Start(ctx context.Context) error {
+func (s *StreamServer) Start(ctx context.Context) error {
 	logger := log.FromContext(ctx)
 
 	network, addr, err := parseAddr(s.addr)
@@ -72,7 +72,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.lis = lis
 
 	s.grpcServer = grpc.NewServer()
-	shared.RegisterTokenProviderServiceServer(s.grpcServer, s)
+	shared.RegisterTokenProviderServiceServer(s.grpcServer, s.handler)
 
 	logger.Info("Starting plugin server", "network", network, "addr", addr)
 
@@ -88,31 +88,117 @@ func (s *Server) Start(ctx context.Context) error {
 }
 
 // Stop gracefully stops the plugin server.
-func (s *Server) Stop() {
-	logger := log.Log
+func (s *StreamServer) Stop() {
+	logger := log.Log.WithName("pluginserver")
 	logger.Info("Stopping plugin server")
-
-	s.pluginsMu.Lock()
-	defer s.pluginsMu.Unlock()
 
 	if s.grpcServer != nil {
 		s.grpcServer.GracefulStop()
+		s.grpcServer = nil
 	}
 
-	for name := range s.plugins {
-		s.providersManager.UnregisterPlugin(name)
+	if s.lis != nil {
+		_ = s.lis.Close()
+		s.lis = nil
 	}
-	s.plugins = make(map[string]shared.TokenProviderServiceClient)
+
+	if s.handler != nil {
+		s.handler.DropAll()
+	}
+}
+
+// StreamHandler implements only the PluginStream RPC for controller-side streaming.
+// The unary RPCs are intentionally unimplemented to make the separation explicit.
+type StreamHandler struct {
+	shared.UnimplementedTokenProviderServiceServer
+
+	providersManager *providers.ProvidersManager
+
+	mu             sync.Mutex
+	activePlugins map[string]struct{}
+}
+
+func NewStreamHandler(providersManager *providers.ProvidersManager) *StreamHandler {
+	return &StreamHandler{
+		providersManager: providersManager,
+		activePlugins:    make(map[string]struct{}),
+	}
 }
 
 // RenewToken renews a token and returns the new token and expiration time.
-func (s *Server) RenewToken(ctx context.Context, in *shared.RenewTokenRequest) (*shared.RenewTokenResponse, error) {
-	return nil, fmt.Errorf("not implemented")
+// This is implemented by plugins, not by the controller-side stream server.
+func (s *StreamHandler) RenewToken(ctx context.Context, in *shared.RenewTokenRequest) (*shared.RenewTokenResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "controller stream server only exposes PluginStream; plugins implement RenewToken")
 }
 
 // GetTokenValidity returns the expiration time of a token.
-func (s *Server) GetTokenValidity(ctx context.Context, in *shared.GetTokenValidityRequest) (*shared.GetTokenValidityResponse, error) {
-	return nil, fmt.Errorf("not implemented")
+// This is implemented by plugins, not by the controller-side stream server.
+func (s *StreamHandler) GetTokenValidity(ctx context.Context, in *shared.GetTokenValidityRequest) (*shared.GetTokenValidityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "controller stream server only exposes PluginStream; plugins implement GetTokenValidity")
+}
+
+// PluginStream handles a bidirectional stream with a plugin.
+// It uses the framework's StreamManager directly with the gRPC stream.
+func (s *StreamHandler) PluginStream(grpcStream grpc.BidiStreamingServer[pluginframeworkv1.PluginStreamMessage, pluginframeworkv1.PluginStreamMessage]) error {
+	logger := log.Log.WithName("pluginserver").WithValues("component", "stream")
+
+	// Create stream manager from the operator-plugin-framework
+	streamMgr, err := stream.NewStreamManager(grpcStream)
+	if err != nil {
+		logger.Error(err, "failed to create stream manager")
+		return err
+	}
+
+	pluginName := streamMgr.GetPluginName()
+	logger = logger.WithValues("plugin", pluginName, "version", streamMgr.GetPluginVersion())
+	logger.Info("Plugin connected via stream")
+
+	// Create wrapper that implements TokenProvider using the stream manager
+	wrapper := &StreamPluginClient{
+		streamMgr:  streamMgr,
+		pluginName: pluginName,
+	}
+
+	// Register the plugin
+	s.registerPlugin(pluginName, wrapper)
+	logger.Info("Plugin registered in provider manager")
+
+	// Keep the stream alive and listen for messages
+	defer func() {
+		s.unregisterPlugin(pluginName)
+		logger.Info("Plugin unregistered")
+	}()
+
+	// Let the stream manager handle incoming messages
+	ctx := grpcStream.Context()
+	return streamMgr.ListenForMessages(ctx)
+}
+
+func (s *StreamHandler) registerPlugin(name string, provider shared.TokenProvider) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.activePlugins[name] = struct{}{}
+	s.providersManager.RegisterPlugin(name, provider)
+}
+
+func (s *StreamHandler) unregisterPlugin(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.activePlugins, name)
+	s.providersManager.UnregisterPlugin(name)
+}
+
+// DropAll forcefully unregisters every plugin currently tracked by the handler.
+func (s *StreamHandler) DropAll() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for name := range s.activePlugins {
+		s.providersManager.UnregisterPlugin(name)
+		delete(s.activePlugins, name)
+	}
 }
 
 // parseAddr parses an address string into network and address components.
@@ -164,3 +250,58 @@ func (pc *PluginClient) GetTokenValidity(ctx context.Context, metadata, token st
 }
 
 var _ shared.TokenProvider = (*PluginClient)(nil)
+
+// StreamPluginClient implements shared.TokenProvider by using the framework's StreamManager.
+// It adapts between the gRPC stream and the framework's stream manager.
+type StreamPluginClient struct {
+	streamMgr  *stream.StreamManager
+	pluginName string
+}
+
+// RenewToken sends a RenewToken RPC call to the plugin via the stream manager.
+func (pc *StreamPluginClient) RenewToken(ctx context.Context, metadata, token string) (string, string, *time.Time, error) {
+	req := &shared.RenewTokenRequest{
+		Metadata: metadata,
+		Token:    token,
+	}
+
+	// Use stream manager to call RPC
+	respBytes, err := pc.streamMgr.CallRPC(ctx, "RenewToken", req)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("RPC failed: %w", err)
+	}
+
+	// Unmarshal response
+	resp := &shared.RenewTokenResponse{}
+	if err := proto.Unmarshal(respBytes, resp); err != nil {
+		return "", "", nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	expTime := resp.GetExpiration().AsTime()
+	return resp.GetToken(), resp.GetNewMetadata(), &expTime, nil
+}
+
+// GetTokenValidity sends a GetTokenValidity RPC call to the plugin via the stream manager.
+func (pc *StreamPluginClient) GetTokenValidity(ctx context.Context, metadata, token string) (*time.Time, error) {
+	req := &shared.GetTokenValidityRequest{
+		Metadata: metadata,
+		Token:    token,
+	}
+
+	// Use stream manager to call RPC
+	respBytes, err := pc.streamMgr.CallRPC(ctx, "GetTokenValidity", req)
+	if err != nil {
+		return nil, fmt.Errorf("RPC failed: %w", err)
+	}
+
+	// Unmarshal response
+	resp := &shared.GetTokenValidityResponse{}
+	if err := proto.Unmarshal(respBytes, resp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	expTime := resp.GetExpiration().AsTime()
+	return &expTime, nil
+}
+
+var _ shared.TokenProvider = (*StreamPluginClient)(nil)

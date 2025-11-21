@@ -1,7 +1,10 @@
 # For details on buf.yaml configuration, visit https://buf.build/docs/configuration/v2/buf-yaml
 version: v2
 modules:
-  - path: proto
+  - name: buf.build/barpilot/token-renewer
+    path: proto
+deps:
+  - buf.build/barpilot/operator-plugin-framework:607e8c008b9348cc8cafd5620ce376cb
 lint:
   use:
     - STANDARD
