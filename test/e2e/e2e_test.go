@@ -30,6 +30,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/guilhem/token-renewer/shared"
@@ -389,15 +390,15 @@ var _ = Describe("Plugin Direct RPC Communication", Ordered, func() {
 
 	AfterAll(func() {
 		grpcSrv.Stop()
-		lis.Close()
+		lis.Close() //nolint:errcheck
 	})
 
 	Context("Token Renewal", func() {
 		It("should renew a token and return new token with metadata", func() {
 			// Create a client connection
-			conn, err := grpc.Dial(serverAddr, grpc.WithInsecure())
+			conn, err := grpc.NewClient(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 			Expect(err).NotTo(HaveOccurred())
-			defer conn.Close()
+			defer conn.Close() //nolint:errcheck
 
 			client := shared.NewTokenProviderServiceClient(conn)
 
@@ -426,9 +427,9 @@ var _ = Describe("Plugin Direct RPC Communication", Ordered, func() {
 	Context("Token Validity Check", func() {
 		It("should return token expiration time", func() {
 			// Create a client connection
-			conn, err := grpc.Dial(serverAddr, grpc.WithInsecure())
+			conn, err := grpc.NewClient(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 			Expect(err).NotTo(HaveOccurred())
-			defer conn.Close()
+			defer conn.Close() //nolint:errcheck
 
 			client := shared.NewTokenProviderServiceClient(conn)
 
@@ -455,9 +456,9 @@ var _ = Describe("Plugin Direct RPC Communication", Ordered, func() {
 
 	Context("Multiple Concurrent Requests", func() {
 		It("should handle concurrent RenewToken requests", func() {
-			conn, err := grpc.Dial(serverAddr, grpc.WithInsecure())
+			conn, err := grpc.NewClient(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 			Expect(err).NotTo(HaveOccurred())
-			defer conn.Close()
+			defer conn.Close() //nolint:errcheck
 
 			client := shared.NewTokenProviderServiceClient(conn)
 

@@ -160,7 +160,7 @@ func (r *TokenReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	return ctrl.Result{
-		RequeueAfter: time.Until(token.Status.ExpirationTime.Time.Add(-token.Spec.Renewval.BeforeDuration.Duration)),
+		RequeueAfter: time.Until(token.Status.ExpirationTime.Add(-token.Spec.Renewval.BeforeDuration.Duration)),
 	}, nil
 }
 
