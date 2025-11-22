@@ -8,7 +8,6 @@ package shared
 
 import (
 	context "context"
-	v1 "github.com/guilhem/operator-plugin-framework/pluginframework/v1"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -22,7 +21,6 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	TokenProviderService_RenewToken_FullMethodName       = "/barpilot.token_renewer.v1.TokenProviderService/RenewToken"
 	TokenProviderService_GetTokenValidity_FullMethodName = "/barpilot.token_renewer.v1.TokenProviderService/GetTokenValidity"
-	TokenProviderService_PluginStream_FullMethodName     = "/barpilot.token_renewer.v1.TokenProviderService/PluginStream"
 )
 
 // TokenProviderServiceClient is the client API for TokenProviderService service.
@@ -35,9 +33,6 @@ type TokenProviderServiceClient interface {
 	RenewToken(ctx context.Context, in *RenewTokenRequest, opts ...grpc.CallOption) (*RenewTokenResponse, error)
 	// GetTokenValidity checks the validity of a token and returns its expiration time.
 	GetTokenValidity(ctx context.Context, in *GetTokenValidityRequest, opts ...grpc.CallOption) (*GetTokenValidityResponse, error)
-	// PluginStream establishes a bidirectional stream for plugin registration and RPC forwarding.
-	// Uses the generic PluginStreamMessage from operator-plugin-framework.
-	PluginStream(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[v1.PluginStreamMessage, v1.PluginStreamMessage], error)
 }
 
 type tokenProviderServiceClient struct {
@@ -68,19 +63,6 @@ func (c *tokenProviderServiceClient) GetTokenValidity(ctx context.Context, in *G
 	return out, nil
 }
 
-func (c *tokenProviderServiceClient) PluginStream(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[v1.PluginStreamMessage, v1.PluginStreamMessage], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &TokenProviderService_ServiceDesc.Streams[0], TokenProviderService_PluginStream_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[v1.PluginStreamMessage, v1.PluginStreamMessage]{ClientStream: stream}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type TokenProviderService_PluginStreamClient = grpc.BidiStreamingClient[v1.PluginStreamMessage, v1.PluginStreamMessage]
-
 // TokenProviderServiceServer is the server API for TokenProviderService service.
 // All implementations must embed UnimplementedTokenProviderServiceServer
 // for forward compatibility.
@@ -91,9 +73,6 @@ type TokenProviderServiceServer interface {
 	RenewToken(context.Context, *RenewTokenRequest) (*RenewTokenResponse, error)
 	// GetTokenValidity checks the validity of a token and returns its expiration time.
 	GetTokenValidity(context.Context, *GetTokenValidityRequest) (*GetTokenValidityResponse, error)
-	// PluginStream establishes a bidirectional stream for plugin registration and RPC forwarding.
-	// Uses the generic PluginStreamMessage from operator-plugin-framework.
-	PluginStream(grpc.BidiStreamingServer[v1.PluginStreamMessage, v1.PluginStreamMessage]) error
 	mustEmbedUnimplementedTokenProviderServiceServer()
 }
 
@@ -109,9 +88,6 @@ func (UnimplementedTokenProviderServiceServer) RenewToken(context.Context, *Rene
 }
 func (UnimplementedTokenProviderServiceServer) GetTokenValidity(context.Context, *GetTokenValidityRequest) (*GetTokenValidityResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetTokenValidity not implemented")
-}
-func (UnimplementedTokenProviderServiceServer) PluginStream(grpc.BidiStreamingServer[v1.PluginStreamMessage, v1.PluginStreamMessage]) error {
-	return status.Errorf(codes.Unimplemented, "method PluginStream not implemented")
 }
 func (UnimplementedTokenProviderServiceServer) mustEmbedUnimplementedTokenProviderServiceServer() {}
 func (UnimplementedTokenProviderServiceServer) testEmbeddedByValue()                              {}
@@ -170,13 +146,6 @@ func _TokenProviderService_GetTokenValidity_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
-func _TokenProviderService_PluginStream_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(TokenProviderServiceServer).PluginStream(&grpc.GenericServerStream[v1.PluginStreamMessage, v1.PluginStreamMessage]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type TokenProviderService_PluginStreamServer = grpc.BidiStreamingServer[v1.PluginStreamMessage, v1.PluginStreamMessage]
-
 // TokenProviderService_ServiceDesc is the grpc.ServiceDesc for TokenProviderService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -193,13 +162,6 @@ var TokenProviderService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _TokenProviderService_GetTokenValidity_Handler,
 		},
 	},
-	Streams: []grpc.StreamDesc{
-		{
-			StreamName:    "PluginStream",
-			Handler:       _TokenProviderService_PluginStream_Handler,
-			ServerStreams: true,
-			ClientStreams: true,
-		},
-	},
+	Streams:  []grpc.StreamDesc{},
 	Metadata: "barpilot/token_renewer/v1/token.proto",
 }

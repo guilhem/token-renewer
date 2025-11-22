@@ -3,8 +3,6 @@ version: v2
 modules:
   - name: buf.build/barpilot/token-renewer
     path: proto
-deps:
-  - buf.build/barpilot/operator-plugin-framework:607e8c008b9348cc8cafd5620ce376cb
 lint:
   use:
     - STANDARD

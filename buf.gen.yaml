@@ -4,6 +4,3 @@ plugins:
     out: .
   - remote: buf.build/grpc/go:v1.5.1
     out: .
-
-inputs:
-  - directory: ./proto

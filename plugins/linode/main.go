@@ -9,9 +9,7 @@ import (
 	"syscall"
 
 	"github.com/guilhem/operator-plugin-framework/client"
-	"github.com/guilhem/operator-plugin-framework/stream"
 	"github.com/guilhem/token-renewer/shared"
-	"google.golang.org/grpc"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
@@ -82,7 +80,7 @@ func runPlugin(ctx context.Context, operatorAddr string, useServiceToken bool, p
 	// Create Plugin Service implementation
 	pluginServer := &LinodePlugin{}
 
-	// Create PluginStreamClient using the simplified API
+	// Create PluginStreamClient using the simplified framework API
 	pluginStreamClient, err := client.New(
 		ctx,
 		pluginName,
@@ -90,10 +88,6 @@ func runPlugin(ctx context.Context, operatorAddr string, useServiceToken bool, p
 		pluginVersion,
 		shared.TokenProviderService_ServiceDesc,
 		pluginServer,
-		func(conn *grpc.ClientConn) (stream.StreamInterface, error) {
-			tokenClient := shared.NewTokenProviderServiceClient(conn)
-			return tokenClient.PluginStream(ctx)
-		},
 		clientOpts...,
 	)
 	if err != nil {

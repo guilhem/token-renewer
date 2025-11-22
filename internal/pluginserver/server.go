@@ -39,10 +39,10 @@ import (
 // so plugin providers can connect. The actual token provider RPCs are implemented
 // by the plugins themselves.
 type StreamServer struct {
-	addr     string
-	handler  *StreamHandler
+	addr       string
+	handler    *StreamHandler
 	grpcServer *grpc.Server
-	lis      net.Listener
+	lis        net.Listener
 }
 
 // NewServer creates a new controller-side stream server that accepts plugin connections.
@@ -114,7 +114,7 @@ type StreamHandler struct {
 
 	providersManager *providers.ProvidersManager
 
-	mu             sync.Mutex
+	mu            sync.Mutex
 	activePlugins map[string]struct{}
 }
 

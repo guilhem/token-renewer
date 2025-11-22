@@ -3,7 +3,6 @@ syntax = "proto3";
 package barpilot.token_renewer.v1;
 
 import "google/protobuf/timestamp.proto";
-import "pluginframework/v1/stream.proto";
 
 option go_package = "./shared";
 
@@ -14,10 +13,6 @@ service TokenProviderService {
 
   // GetTokenValidity checks the validity of a token and returns its expiration time.
   rpc GetTokenValidity(GetTokenValidityRequest) returns (GetTokenValidityResponse);
-
-  // PluginStream establishes a bidirectional stream for plugin registration and RPC forwarding.
-  // Uses the generic PluginStreamMessage from operator-plugin-framework.
-  rpc PluginStream(stream pluginframework.v1.PluginStreamMessage) returns (stream pluginframework.v1.PluginStreamMessage);
 }
 
 // RenewTokenRequest is the request message for the RenewToken RPC.

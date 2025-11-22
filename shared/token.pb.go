@@ -7,7 +7,6 @@
 package shared
 
 import (
-	v1 "github.com/guilhem/operator-plugin-framework/pluginframework/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -239,7 +238,7 @@ var File_barpilot_token_renewer_v1_token_proto protoreflect.FileDescriptor
 
 const file_barpilot_token_renewer_v1_token_proto_rawDesc = "" +
 	"\n" +
-	"%barpilot/token_renewer/v1/token.proto\x12\x19barpilot.token_renewer.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fpluginframework/v1/stream.proto\"E\n" +
+	"%barpilot/token_renewer/v1/token.proto\x12\x19barpilot.token_renewer.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"E\n" +
 	"\x11RenewTokenRequest\x12\x1a\n" +
 	"\bmetadata\x18\x01 \x01(\tR\bmetadata\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\"\x89\x01\n" +
@@ -255,12 +254,11 @@ const file_barpilot_token_renewer_v1_token_proto_rawDesc = "" +
 	"\x18GetTokenValidityResponse\x12:\n" +
 	"\n" +
 	"expiration\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"expiration2\xe4\x02\n" +
+	"expiration2\xfe\x01\n" +
 	"\x14TokenProviderService\x12i\n" +
 	"\n" +
 	"RenewToken\x12,.barpilot.token_renewer.v1.RenewTokenRequest\x1a-.barpilot.token_renewer.v1.RenewTokenResponse\x12{\n" +
-	"\x10GetTokenValidity\x122.barpilot.token_renewer.v1.GetTokenValidityRequest\x1a3.barpilot.token_renewer.v1.GetTokenValidityResponse\x12d\n" +
-	"\fPluginStream\x12'.pluginframework.v1.PluginStreamMessage\x1a'.pluginframework.v1.PluginStreamMessage(\x010\x01B\n" +
+	"\x10GetTokenValidity\x122.barpilot.token_renewer.v1.GetTokenValidityRequest\x1a3.barpilot.token_renewer.v1.GetTokenValidityResponseB\n" +
 	"Z\b./sharedb\x06proto3"
 
 var (
@@ -282,19 +280,16 @@ var file_barpilot_token_renewer_v1_token_proto_goTypes = []any{
 	(*GetTokenValidityRequest)(nil),  // 2: barpilot.token_renewer.v1.GetTokenValidityRequest
 	(*GetTokenValidityResponse)(nil), // 3: barpilot.token_renewer.v1.GetTokenValidityResponse
 	(*timestamppb.Timestamp)(nil),    // 4: google.protobuf.Timestamp
-	(*v1.PluginStreamMessage)(nil),   // 5: pluginframework.v1.PluginStreamMessage
 }
 var file_barpilot_token_renewer_v1_token_proto_depIdxs = []int32{
 	4, // 0: barpilot.token_renewer.v1.RenewTokenResponse.expiration:type_name -> google.protobuf.Timestamp
 	4, // 1: barpilot.token_renewer.v1.GetTokenValidityResponse.expiration:type_name -> google.protobuf.Timestamp
 	0, // 2: barpilot.token_renewer.v1.TokenProviderService.RenewToken:input_type -> barpilot.token_renewer.v1.RenewTokenRequest
 	2, // 3: barpilot.token_renewer.v1.TokenProviderService.GetTokenValidity:input_type -> barpilot.token_renewer.v1.GetTokenValidityRequest
-	5, // 4: barpilot.token_renewer.v1.TokenProviderService.PluginStream:input_type -> pluginframework.v1.PluginStreamMessage
-	1, // 5: barpilot.token_renewer.v1.TokenProviderService.RenewToken:output_type -> barpilot.token_renewer.v1.RenewTokenResponse
-	3, // 6: barpilot.token_renewer.v1.TokenProviderService.GetTokenValidity:output_type -> barpilot.token_renewer.v1.GetTokenValidityResponse
-	5, // 7: barpilot.token_renewer.v1.TokenProviderService.PluginStream:output_type -> pluginframework.v1.PluginStreamMessage
-	5, // [5:8] is the sub-list for method output_type
-	2, // [2:5] is the sub-list for method input_type
+	1, // 4: barpilot.token_renewer.v1.TokenProviderService.RenewToken:output_type -> barpilot.token_renewer.v1.RenewTokenResponse
+	3, // 5: barpilot.token_renewer.v1.TokenProviderService.GetTokenValidity:output_type -> barpilot.token_renewer.v1.GetTokenValidityResponse
+	4, // [4:6] is the sub-list for method output_type
+	2, // [2:4] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name
 	2, // [2:2] is the sub-list for extension extendee
 	0, // [0:2] is the sub-list for field type_name
