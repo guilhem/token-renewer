@@ -32,6 +32,10 @@ github.com/google/pprof v0.0.0-20241029153458-d1b30febd7db h1:097atOisP2aRj7vFgY
 github.com/google/pprof v0.0.0-20241029153458-d1b30febd7db/go.mod h1:vavhavw2zAxS5dIdcRluK6cSGGPlZynqzFM8NdvU144=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+github.com/guilhem/operator-plugin-framework v0.0.0-20251121000814-e4cc56a28677 h1:473E+Rbx/cxKfOzggyzdPgP3uOQRcaJFHysdUmYrlT4=
+github.com/guilhem/operator-plugin-framework v0.0.0-20251121000814-e4cc56a28677/go.mod h1:i0kTCnH1Xt+VfDPPtMf2Kmh18JtmVXiNKtHBp3qTy64=
+github.com/guilhem/token-renewer v0.0.0-20251121094559-167ffd95633b h1:F4OGdi98W8OuFDO03cTxFjUeUW17HF25Zqmke8TF+Nw=
+github.com/guilhem/token-renewer v0.0.0-20251121094559-167ffd95633b/go.mod h1:cr+Z1MzZ8KpcaO9qiRXwP8TuzXEThVUwJU9ySNPEpG8=
 github.com/jarcoal/httpmock v1.3.1 h1:iUx3whfZWVf3jT01hQTO/Eo5sAYtB2/rqaUuOtpInww=
 github.com/jarcoal/httpmock v1.3.1/go.mod h1:3yb8rc4BI7TCBhFY8ng0gjuLKJNquuDNiPaZjnENuYg=
 github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=
